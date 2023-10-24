@@ -5,10 +5,10 @@ from langchain.vectorstores import FAISS
 from langchain.llms import CTransformers
 from langchain.chains import RetrievalQA
 import chainlit as cl
-from flask import Flask, jsonify, request 
-from flask_cors import CORS
+from flask import Flask, jsonify, request
+from flask_cors import cross_origin
 
-DB_FAISS_PATH = 'vectorstore/db_faiss'
+DB_FAISS_PATH = "vectorstore/db_faiss"
 
 custom_prompt_template = """Use the following pieces of information to answer the user's question.
 If you don't know the answer, just say that you don't know, don't try to make up an answer.
@@ -20,39 +20,47 @@ Only return the helpful answer below and nothing else.
 Helpful answer:
 """
 
+
 def set_custom_prompt():
     """
     Prompt template for QA retrieval for each vectorstore
     """
-    prompt = PromptTemplate(template=custom_prompt_template,
-                            input_variables=['context', 'question'])
+    prompt = PromptTemplate(
+        template=custom_prompt_template, input_variables=["context", "question"]
+    )
     return prompt
 
-#Retrieval QA Chain
+
+# Retrieval QA Chain
 def retrieval_qa_chain(llm, prompt, db):
-    qa_chain = RetrievalQA.from_chain_type(llm=llm,
-                                       chain_type='stuff',
-                                       retriever=db.as_retriever(search_kwargs={'k': 2}),
-                                       return_source_documents=True,
-                                       chain_type_kwargs={'prompt': prompt}
-                                       )
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=db.as_retriever(search_kwargs={"k": 2}),
+        return_source_documents=True,
+        chain_type_kwargs={"prompt": prompt},
+    )
     return qa_chain
 
-#Loading the model
+
+# Loading the model
 def load_llm():
     # Load the locally downloaded model here
     llm = CTransformers(
-        model = "llama-2-7b-chat.ggmlv3.q8_0.bin",
+        model="llama-2-7b-chat.ggmlv3.q8_0.bin",
         model_type="llama",
-        max_new_tokens = 512,
-        temperature = 0.6
+        max_new_tokens=1024,
+        temperature=0.5,
     )
     return llm
 
-#QA Model Function
+
+# QA Model Function
 def qa_bot():
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2",
-                                       model_kwargs={'device': 'cpu'})
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={"device": "cpu"},
+    )
     db = FAISS.load_local(DB_FAISS_PATH, embeddings)
     llm = load_llm()
     qa_prompt = set_custom_prompt()
@@ -60,21 +68,19 @@ def qa_bot():
 
     return qa
 
-Model= qa_bot()
+
+Model = qa_bot()
 
 
-
-
-#output function
+# output function
 def final_result(query):
     qa_result = qa_bot()
-    response = qa_result({'query': query})
+    response = qa_result({"query": query})
     print(response)
     return response
-    
 
 
-#chainlit code
+# chainlit code
 # @cl.on_chat_start
 # async def start():
 #     chain = qa_bot()
@@ -87,7 +93,7 @@ def final_result(query):
 
 # @cl.on_message
 # async def main(message: cl.Message):
-#     chain = cl.user_session.get("chain") 
+#     chain = cl.user_session.get("chain")
 #     cb = cl.AsyncLangchainCallbackHandler(
 #         stream_final_answer=True, answer_prefix_tokens=["FINAL", "ANSWER"]
 #     )
@@ -95,23 +101,7 @@ def final_result(query):
 #     res = await chain.acall(message.content, callbacks=[cb])
 #     answer = res["result"]
 #     sources = res["source_documents"]
-    
-#     # text_elements = []  # type: List[cl.Text]
 
-#     # if sources:
-#     #     for source_idx, source_doc in enumerate(sources):
-#     #         source_name = f"source_{source_idx}"
-#     #         # Create the text element referenced in the message
-#     #         text_elements.append(
-#     #             cl.Text(content=source_doc.page_content, name=source_name)
-#     #         )
-#     #     source_names = [text_el.name for text_el in text_elements]
-
-#     #     if source_names:
-#     #         answer += f"\nSources: {', '.join(source_names)}"
-#     #     else:
-#     #         answer += "\nNo sources found"
-#     # await cl.Message(content=answer, elements=text_elements).send()
 #     if sources:
 #         answer += f"\n \n \nSources:" + str(sources)
 #     else:
@@ -120,28 +110,43 @@ def final_result(query):
 #     await cl.Message(content=answer).send()
 
 
-    
-  
-app = Flask(__name__) 
-  
-# on the terminal type: curl http://127.0.0.1:5000/ 
+# text_elements = []  # type: List[cl.Text]
 
-@app.route('/api', methods = ['GET', 'POST']) 
-def home(): 
-    if(request.method == 'GET'): 
-  
+# if sources:
+#     for source_idx, source_doc in enumerate(sources):
+#         source_name = f"source_{source_idx}"
+#         # Create the text element referenced in the message
+#         text_elements.append(
+#             cl.Text(content=source_doc.page_content, name=source_name)
+#         )
+#     source_names = [text_el.name for text_el in text_elements]
+
+#     if source_names:
+#         answer += f"\nSources: {', '.join(source_names)}"
+#     else:
+#         answer += "\nNo sources found"
+# await cl.Message(content=answer, elements=text_elements).send()
+
+
+app = Flask(__name__)
+
+# on the terminal type: curl http://127.0.0.1:5000/
+
+
+@app.route("/api", methods=["GET", "POST"])
+@cross_origin()
+def home():
+    if request.method == "GET":
         data = "hello world"
-        return jsonify({'data': data}) 
-    
-    if(request.method =='POST'):
-        question = request.form.get("question")
-        res = final_result(question)
+        return jsonify({"data": data})
+
+    if request.method == "POST":
+        req = request.get_json()
+        print(req["question"])
+        res = final_result(req["question"])
         answer = res["result"]
         return jsonify(answer)
 
 
-
-if __name__ == '__main__': 
-  
-    app.run(debug = True) 
-
+if __name__ == "__main__":
+    app.run(debug=True)
